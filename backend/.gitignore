@@ -1,0 +1,18 @@
+# 회사 부품 데이터 — git에 올리지 않음
+master_data/
+
+# [2026-10 추가] learned_rules.json / EG_PARTSEXCLUDE_NOT_SERVICE.xlsx는
+# 실제 품번이 들어간 파생 데이터라 master_data/와 같은 이유로 git 제외.
+# 단, 두 파일은 백엔드 동작에 반드시 필요하므로 git 바깥에서(이 패치처럼
+# 직접 전달) 실제 배포 폴더에는 계속 존재해야 함 - 지우지 말 것.
+app/data/
+
+# 로컬 DB (최초 실행 시 자동 생성)
+data/*.db
+
+# 가상환경
+.venv/
+
+# 파이썬 캐시
+__pycache__/
+*.pyc
