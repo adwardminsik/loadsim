@@ -4,7 +4,16 @@
 로컬 프로그램(설치형) 방식이므로 127.0.0.1(로컬호스트)에서만 서비스합니다.
 """
 
+import mimetypes
 import os
+
+# Windows에서는 Python의 mimetypes 모듈이 "레지스트리"에 등록된 값을 우선 사용하는데,
+# 일부 PC에서 레지스트리의 .js 항목이 'text/plain' 등으로 잘못 등록돼 있어서 브라우저가
+# "Expected a JavaScript module script but got text/plain" 이라며 로딩을 거부하는 경우가
+# 있다. 레지스트리보다 먼저 올바른 값을 강제로 등록해서 이 문제를 원천 차단한다.
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("font/woff2", ".woff2")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
