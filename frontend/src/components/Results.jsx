@@ -167,7 +167,7 @@ export default function Results({ simulation, title, data, onBack, onRestart }) 
                 ) : (
                   <div className="viewer viewer-fallback">컨테이너 규격을 불러오지 못해 3D 화면을 표시할 수 없습니다.</div>
                 )}
-                <p className="hint">드래그: 회전 · 휠: 확대/축소 · 우클릭 드래그: 이동 · 박스를 클릭하면 상세가 표시됩니다.</p>
+                <p className="hint">드래그: 회전 · Ctrl(⌘)+휠 또는 트랙패드 핀치: 확대/축소 · 우클릭 드래그: 이동 · 박스를 클릭하면 상세가 표시됩니다. (일반 휠은 페이지 스크롤에 사용됩니다)</p>
               </div>
 
               <aside className="side">
