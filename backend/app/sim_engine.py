@@ -785,8 +785,25 @@ class Engine:
                 self._compact_wooden = orig_compact
             if oversized or not sub_boxes:
                 return None
-            return [LoadBox(0, b.box_code, b.dims_mm, b.used_weight,
-                            b.used_volume / (vol3(b.dims_mm) / 1e9) * 100, b.items) for b in sub_boxes]
+
+            # [2026-10 추가] pack_wooden()이 돌려주는 WoodBox.items는 Item 객체 목록이지만,
+            # 호출 측(pipeline.py의 run_container_loading → _box_parts)은 LoadBox.items를
+            # "화면 표시용 부품 요약" [{part_no, desc, qty}, ...] 형태로 기대한다. 이걸 그대로
+            # 안 바꾸면 Item 객체가 그대로 들어가서 "argument after ** must be a mapping"
+            # TypeError가 난다 - 일반(비-재분할) 박스를 만들 때(pipeline.py pack-parts
+            # 단계)와 동일한 방식으로 품번별 집계해서 넣는다.
+            out_boxes = []
+            for b in sub_boxes:
+                part_counts = {}
+                for it in b.items:
+                    key = it.base_part_no
+                    part_counts.setdefault(key, {"desc": it.desc, "qty": 0})
+                    part_counts[key]["qty"] += it.bundle_qty
+                items_summary = [{"part_no": k, "desc": v["desc"], "qty": v["qty"]}
+                                  for k, v in part_counts.items()]
+                out_boxes.append(LoadBox(0, b.box_code, b.dims_mm, b.used_weight,
+                                 b.used_volume / (vol3(b.dims_mm) / 1e9) * 100, items_summary))
+            return out_boxes
         except Exception:
             return None
 
