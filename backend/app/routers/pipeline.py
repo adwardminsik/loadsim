@@ -252,6 +252,11 @@ def run_pack_parts(simulation_id: str, db: Session = Depends(get_db)):
             "weight_kg": round(b.used_weight, 3),
             "fill_pct": round(b.used_volume / (sim_engine.vol3(b.dims_mm) / 1e9) * 100, 2) if sim_engine.vol3(b.dims_mm) else 0.0,
             "parts": [{"part_no": k, "desc": v["desc"], "qty": v["qty"]} for k, v in part_counts.items()],
+            # [2026-10 추가] 4단계(컨테이너 적재)에서 "병합된 박스 재분할" 보강 로직이 쓸 수
+            # 있도록, 위 parts 요약(품번+수량)과 별개로 품목별 실제 치수/중량까지 담은 원본을
+            # 같이 저장해둔다. 이게 없으면 4단계는 요약 정보만 보고 재분할을 시도하다가
+            # dims_mm/weight_kg가 없어서 조용히 실패(= 보강 효과 없음)하게 된다.
+            "raw_items": [_item_to_raw(it) for it in b.items],
         })
 
     simulation.pack_parts_result = {
@@ -317,7 +322,17 @@ def _bounded_fallback_positions(boxes, container_dims_mm):
 
 def _raw_box_to_loadbox(d: dict, idx: int):
     # [수정] parts 정보도 같이 복원해서 4단계 결과(Placement)에 '이 박스 안의 부품'을 담을 수 있게 함
-    return sim_engine.LoadBox(idx + 1, d["box_code"], d["dims_mm"], d["weight_kg"], d["fill_pct"], d.get("parts", []))
+    box = sim_engine.LoadBox(idx + 1, d["box_code"], d["dims_mm"], d["weight_kg"], d["fill_pct"], d.get("parts", []))
+    # [2026-10 추가] "병합된 박스 재분할" 보강 로직(_resplit_box)이 쓸 품목별 원본(치수/중량
+    # 포함)을 .items와 별도의 속성에 둔다 - .items는 위에서 이미 화면표시용 parts 요약으로
+    # 쓰고 있어서 덮어쓰면 안 됨. 원본이 없는 옛날 시뮬레이션 데이터일 수도 있으니 get으로 방어.
+    raw_items = d.get("raw_items")
+    if raw_items:
+        try:
+            box.raw_items = [sim_engine.Item(**ri) for ri in raw_items]
+        except Exception:
+            box.raw_items = None
+    return box
 
 
 def _containers_to_scenario(engine, containers, ctype: str) -> dict:

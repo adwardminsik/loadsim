@@ -751,17 +751,44 @@ class Engine:
         컨테이너의 남는 공간(대개 특정 높이 이하의 좁은 틈)과 안 맞을 수 있다 - 그래서 못
         들어간 박스를 압축 전 상태로 되돌려 다시 만들어보면, 이미 자주 쓰이는 표준 박스
         모양(예: 31-2121)으로 다시 나뉘어 남는 공간에 들어갈 가능성이 생긴다. 실패하면
-        원래 박스를 그대로 반환(기존 동작과 동일, 손해 없음)."""
-        orig_compact = self._compact_wooden
-        self._compact_wooden = lambda open_, max_iter=500: open_
+        원래 박스를 그대로 반환(기존 동작과 동일, 손해 없음).
+
+        [2026-10 보강] 이 재분할은 "되면 좋고 안되면 원래대로"인 순수 보강 로직이므로,
+        호출 경로(예: pipeline.py의 추천 비교용 auto_pack)에 따라 load_box.items 안의
+        항목이 Item 객체가 아니라 dict로 들어오는 경우가 있어도, 또는 그 밖의 어떤 예상치
+        못한 모양이어도 절대 500 에러로 전체 시뮬레이션을 죽이지 않고, 조용히 실패
+        처리(= 기존 미배치 상태 유지)한다.
+
+        [2026-10 추가] REST API 경로(pipeline.py)에서는 .items가 "박스 안 부품 요약"
+        (품번+수량, 치수/중량 없음) 표시용으로 이미 쓰이고 있어서, 재분할에 필요한 실제
+        치수/중량 원본은 .raw_items라는 별도 속성에 들어온다 - 있으면 그걸 우선 쓴다."""
         try:
-            sub_boxes, oversized = self.pack_wooden(list(load_box.items))
-        finally:
-            self._compact_wooden = orig_compact
-        if oversized or not sub_boxes:
+            raw_items = getattr(load_box, "raw_items", None)
+            source_items = raw_items if raw_items else load_box.items
+
+            _item_fields = ("part_no", "base_part_no", "dims_mm", "weight_kg", "bundle_qty",
+                           "override", "desc", "conf", "box_code")
+            norm_items = []
+            for it in source_items:
+                if isinstance(it, dict):
+                    norm_items.append(Item(**{k: v for k, v in it.items() if k in _item_fields}))
+                elif all(hasattr(it, f) for f in ("base_part_no", "dims_mm", "weight_kg")):
+                    norm_items.append(it)
+                else:
+                    return None
+
+            orig_compact = self._compact_wooden
+            self._compact_wooden = lambda open_, max_iter=500: open_
+            try:
+                sub_boxes, oversized = self.pack_wooden(norm_items)
+            finally:
+                self._compact_wooden = orig_compact
+            if oversized or not sub_boxes:
+                return None
+            return [LoadBox(0, b.box_code, b.dims_mm, b.used_weight,
+                            b.used_volume / (vol3(b.dims_mm) / 1e9) * 100, b.items) for b in sub_boxes]
+        except Exception:
             return None
-        return [LoadBox(0, b.box_code, b.dims_mm, b.used_weight,
-                        b.used_volume / (vol3(b.dims_mm) / 1e9) * 100, b.items) for b in sub_boxes]
 
     def pack_containers(self, boxes, type_):
         C, payload, cv = CONTAINERS[type_]["dims"], CONTAINERS[type_]["payload_kg"], self.c_vol(type_)
@@ -812,28 +839,33 @@ class Engine:
         for r in result:
             if not r["approx"]:
                 continue
-            still_approx = []
-            for box in r["approx"]:
-                sub_boxes = self._resplit_box(box)
-                if not sub_boxes:
-                    still_approx.append(box)
-                    continue
-                points = _rebuild_points(r["placed"], C)
-                trial_placed = list(r["placed"])
-                ok_all = True
-                for sb in sub_boxes:
-                    if not try_place_one(sb, points, trial_placed, C):
-                        ok_all = False
-                        break
-                if ok_all:
-                    added_v = sum(vol3(sb.dims_mm) for sb in sub_boxes) / 1e9
-                    added_w = sum(sb.weight_kg for sb in sub_boxes)
-                    r["placed"] = trial_placed
-                    r["uv"] += added_v
-                    r["uw"] += added_w
-                else:
-                    still_approx.append(box)
-            r["approx"] = still_approx
+            try:
+                still_approx = []
+                for box in r["approx"]:
+                    sub_boxes = self._resplit_box(box)
+                    if not sub_boxes:
+                        still_approx.append(box)
+                        continue
+                    points = _rebuild_points(r["placed"], C)
+                    trial_placed = list(r["placed"])
+                    ok_all = True
+                    for sb in sub_boxes:
+                        if not try_place_one(sb, points, trial_placed, C):
+                            ok_all = False
+                            break
+                    if ok_all:
+                        added_v = sum(vol3(sb.dims_mm) for sb in sub_boxes) / 1e9
+                        added_w = sum(sb.weight_kg for sb in sub_boxes)
+                        r["placed"] = trial_placed
+                        r["uv"] += added_v
+                        r["uw"] += added_w
+                    else:
+                        still_approx.append(box)
+                r["approx"] = still_approx
+            except Exception:
+                # 이 보강 단계 전체가 "되면 좋고 안되면 원래대로"이므로, 여기서 무슨 일이
+                # 생기든 r을 건드리지 않은 원래 상태로 둔다(손해 없음).
+                pass
 
         out = []
         for i, r in enumerate(result):
