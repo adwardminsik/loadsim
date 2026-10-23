@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ContainerViewer from './ContainerViewer.jsx';
 import { buildColorMap, containerLabel, displayName, fmt, normalizeBoxParts } from '../format.js';
 
@@ -9,6 +9,7 @@ export default function Results({ simulation, title, data, onBack, onRestart }) 
   const [tab, setTab] = useState(0);
   const [selected, setSelected] = useState(null);
   const [stage, setStage] = useState(null); // { activeIdx:[...], caption, hint, progress } | null
+  const loadviewRef = useRef(null);
 
   const specOf = (type) => containers.find((c) => c.type === type || c.id === type);
   const failed = run.status !== 'COMPLETED';
@@ -23,6 +24,17 @@ export default function Results({ simulation, title, data, onBack, onRestart }) 
   useEffect(() => {
     setSelected(null);
   }, [tab]);
+
+  // [2026-10 추가] 결과 화면(이 컴포넌트)이 뜨면, 3D 적재 화면을 찾으려고 직접
+  // 스크롤할 필요 없이 브라우저 창 세로 가운데로 자동으로 보이게 한다. Results는
+  // 시뮬레이션이 끝날 때마다 새로 mount되므로, 마운트 시 한 번만 실행한다(탭을
+  // 바꿀 때마다 다시 스크롤되면 오히려 불편하므로 의존성 배열을 비워둠).
+  useEffect(() => {
+    if (!failed && loadviewRef.current) {
+      loadviewRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const colorMap = useMemo(
     () => buildColorMap(loadedContainers.flatMap((c) => c.placements.map((p) => p.box_type_id))),
@@ -116,7 +128,7 @@ export default function Results({ simulation, title, data, onBack, onRestart }) 
       {!failed && current && (
         <>
           <h3 className="sec-title">적재 배치도</h3>
-          <div className="loadview">
+          <div className="loadview" ref={loadviewRef}>
             <div className="tabs" role="tablist">
               {loadedContainers.map((c, i) => (
                 <button
@@ -167,7 +179,7 @@ export default function Results({ simulation, title, data, onBack, onRestart }) 
                 ) : (
                   <div className="viewer viewer-fallback">컨테이너 규격을 불러오지 못해 3D 화면을 표시할 수 없습니다.</div>
                 )}
-                <p className="hint">드래그: 회전 · Ctrl(⌘)+휠 또는 트랙패드 핀치: 확대/축소 · 우클릭 드래그: 이동 · 박스를 클릭하면 상세가 표시됩니다. (일반 휠은 페이지 스크롤에 사용됩니다)</p>
+                <p className="hint">드래그: 회전 · 휠: 확대/축소 · 우클릭 드래그: 이동 · 박스를 클릭하면 상세가 표시됩니다.</p>
               </div>
 
               <aside className="side">

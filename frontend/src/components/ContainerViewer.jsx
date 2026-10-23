@@ -332,14 +332,6 @@ export default function ContainerViewer({ container, placements, colorMap, selec
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.maxPolarAngle = Math.PI * 0.495;
-    // [2026-10 수정] OrbitControls 기본값은 3D 화면 위에서 마우스 휠을 돌리면 무조건
-    // 확대/축소로 가로채면서 preventDefault()를 호출한다 - 3D 화면이 페이지의 많은
-    // 영역을 차지하다 보니, 결과 화면을 아래로 스크롤하려고 휠을 돌려도 스크롤이 전혀
-    // 안 되는 문제가 있었다. enableZoom을 끄고(= 기본 휠 핸들러가 더 이상 가로채지
-    // 않음), Ctrl(또는 Mac은 trackpad 핀치 제스처가 브라우저에서 ctrlKey+wheel로 들어옴)
-    // 키를 누른 채 휠을 돌릴 때만 수동으로 확대/축소하도록 바꿨다. 일반 휠은 그대로
-    // 페이지 스크롤에 쓰인다.
-    controls.enableZoom = false;
     // 사용자가 직접 드래그/휠로 카메라를 움직이면, 그 다음부터는 리사이즈돼도
     // 억지로 구도를 되돌리지 않는다(사용자가 고른 시점을 존중).
     let userMoved = false;
@@ -411,22 +403,6 @@ export default function ContainerViewer({ container, placements, colorMap, selec
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointerup', onUp);
 
-    // Ctrl(윈도우) / ⌘(맥) + 휠, 또는 트랙패드 핀치(브라우저가 ctrlKey+wheel로 전달)일
-    // 때만 확대/축소한다. 그 외의 일반 휠은 그대로 둬서(preventDefault 호출 안 함)
-    // 페이지가 정상적으로 스크롤되게 한다.
-    const onWheel = (e) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
-      const scale = e.deltaY > 0 ? 1.1 : 0.9;
-      dir.multiplyScalar(scale);
-      const dist = Math.min(Math.max(dir.length(), 1), 280);
-      dir.setLength(dist);
-      camera.position.copy(controls.target).add(dir);
-      userMoved = true;
-    };
-    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
-
     sceneRef.current = { scene, camera, controls, world, meshes: [], renderer, token: 0, ready: false };
 
     return () => {
@@ -434,7 +410,6 @@ export default function ContainerViewer({ container, placements, colorMap, selec
       ro.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onDown);
       renderer.domElement.removeEventListener('pointerup', onUp);
-      renderer.domElement.removeEventListener('wheel', onWheel);
       controls.dispose();
       disposeObject(world);
       renderer.dispose();
